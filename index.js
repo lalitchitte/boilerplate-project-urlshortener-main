@@ -13,6 +13,10 @@ const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+app.use(bodyParser.urlencoded({ extended: false }));
+
+let urlDatabase = {}; // In-memory storage for URLs
+let urlId = 1;
 
 app.use("/public", express.static(`${process.cwd()}/public`));
 
@@ -20,23 +24,41 @@ app.get("/", function (req, res) {
   res.sendFile(process.cwd() + "/views/index.html");
 });
 
-app.post('/api/shorturl', (req, res) => {
-  const { url } = req.body;
-  if (!/https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/.test(url)) {
-    return res.json({ error: 'invalid url' });
+const isValidUrl = (url) => {
+  const urlRegex = /^(http|https):\/\/[^ "]+$/;
+  return urlRegex.test(url);
+};
+
+// POST endpoint to shorten URL
+app.post("/api/shorturl", (req, res) => {
+  const originalUrl = req.body.url;
+
+  // Validate the URL
+  if (!isValidUrl(originalUrl)) {
+    return res.json({ error: "invalid url" });
   }
-  const shortUrl = Math.floor(Math.random() * 10000);
-  shortUrlMap[shortUrl] = url;
-  res.json({ original_url: url, short_url });
+
+  // Create a new shortened URL
+  const shortUrl = urlId++;
+  urlDatabase[shortUrl] = originalUrl; // Store the original URL with the short URL as the key
+
+  // Respond with the original and shortened URL
+  res.json({
+    original_url: originalUrl,
+    short_url: shortUrl,
+  });
 });
 
-app.get('/api/shorturl/:shortUrl', (req, res) => {
-  const { shortUrl } = req.params;
-  const originalUrl = shortUrlMap[shortUrl];
-  if (!originalUrl) {
-    return res.status(404).json({ error: 'short url not found' });
+// Redirect to the original URL
+app.get("/api/shorturl/:short_url", (req, res) => {
+  const shortUrl = req.params.short_url;
+  const originalUrl = urlDatabase[shortUrl];
+
+  if (originalUrl) {
+    res.redirect(originalUrl); // Redirect to the original URL
+  } else {
+    res.json({ error: "No short URL found for the given input" });
   }
-  res.redirect(originalUrl);
 });
 
 // Your first API endpoint
